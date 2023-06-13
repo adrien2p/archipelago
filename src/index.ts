@@ -1,24 +1,17 @@
-import { Express, Handler } from 'express';
+import { Express } from 'express';
 import { readdir } from 'fs/promises';
 import { join, extname } from 'path';
 import { default as pino } from 'pino';
 
 const logger = pino({
-  timestamp: false,
-  base: null,
-  formatters: {
-    level() {
-      return { level: undefined };
+    timestamp: false,
+    base: null,
+    formatters: {
+        level() {
+            return { level: undefined };
+        },
     },
-  },
 });
-
-type RouteDescriptor = {
-  absolutePath: string;
-  relativePath: string;
-  route: string;
-  handlers?: Array<{ verb: string; handler: Handler }>;
-}
 
 /* eslint-disable no-unused-vars */
 enum RouteVerbs {
@@ -33,10 +26,24 @@ enum RouteVerbs {
 }
 /* eslint-enable no-unused-vars */
 
+type RouteConfig = {
+  method: RouteVerbs;
+  handlers: ((...args: unknown[]) => Promise<unknown>)[];
+}
+
+type RouteDescriptor = {
+  absolutePath: string;
+  relativePath: string;
+  route: string;
+  config?: {
+    routes: RouteConfig[];
+  }
+}
+
 const pathSegmentReplacer = {
-  '\\[\\.\\.\\.\\]': () => `*`,
-  '\\[(\\w+)?': (param?: string) => `:${param}`,
-  '\\]': () => ``,
+    '\\[\\.\\.\\.\\]': () => `*`,
+    '\\[(\\w+)?': (param?: string) => `:${param}`,
+    '\\]': () => ``,
 };
 
 const routesMap = new Map<string, RouteDescriptor>();
@@ -52,21 +59,22 @@ const routesMap = new Map<string, RouteDescriptor>();
  * /admin/orders/[id]/index.ts => /admin/orders/:id/index.ts
  */
 function parseRoute(route: string): string {
-  for (const [searchFor, replacedByFn] of Object.entries(pathSegmentReplacer)) {
-    const replacer = new RegExp(searchFor, 'g');
+    for (const config of Object.entries(pathSegmentReplacer)) {
+        const [searchFor, replacedByFn] = config;
+        const replacer = new RegExp(searchFor, 'g');
 
-    const matches = route.matchAll(replacer);
-    for (const match of matches) {
-      route = route.replace(match[0], replacedByFn(match?.[1]));
+        const matches = route.matchAll(replacer);
+        for (const match of matches) {
+            route = route.replace(match[0], replacedByFn(match?.[1]));
+        }
+
+        const extension = extname(route);
+        if (extension) {
+            route = route.replace(extension, '');
+        }
     }
 
-    const extension = extname(route);
-    if (extension) {
-      route = route.replace(extension, '');
-    }
-  }
-
-  return route;
+    return route;
 }
 
 /**
@@ -75,39 +83,41 @@ function parseRoute(route: string): string {
  *
  * @return {Promise<void>}
  */
-async function retrieveHandlers(): Promise<void> {
-  await Promise.all(
-      [...routesMap.values()].map(async (descriptor) => {
-        const absolutePath = descriptor.absolutePath;
-        const foundHandlers: string[] = [];
-        return await import(absolutePath)
-            .then((imp) => {
-              for (const verb in RouteVerbs) {
-                if (!imp[verb]) {
-                  continue;
-                }
+async function retrieveFilesRoutesConfig(): Promise<void> {
+    await Promise.all(
+        [...routesMap.values()].map(async (descriptor) => {
+            const absolutePath = descriptor.absolutePath;
+            return await import(absolutePath)
+                .then((imp) => {
+                    if (!imp.config) {
+                        logger.info(
+                            `Skipping loading handlers from ` +
+                          `${descriptor.relativePath}.` +
+                          `No config found.`,
+                        );
+                    }
 
-                if (!descriptor.handlers) {
-                  descriptor.handlers = [];
-                }
+                    descriptor.config = imp.config;
 
-                foundHandlers.push(verb);
+                    routesMap.set(absolutePath, descriptor);
+                }).finally(() => {
+                    const config = descriptor.config;
+                    const verbs = config?.routes
+                        ?.map((route) => route.method) ?? ['none'];
+                    const handlersCount = config?.routes
+                        ?.map((route: RouteConfig) => route.handlers.length)
+                        ?.reduce((a, b) => a + b, 0) ?? 0;
 
-                descriptor.handlers.push({
-                  verb,
-                  handler: imp[verb],
+                    if (handlersCount) {
+                        logger.info(
+                            `Loading handlers from ` +
+                          `${descriptor.relativePath} ` +
+                          `(${handlersCount} found - ${verbs.join(', ')})`,
+                        );
+                    }
                 });
-
-                routesMap.set(absolutePath, descriptor);
-              }
-            }).finally(() => {
-              logger.info(
-                  `Loading handlers from ${descriptor.relativePath} ` +
-              `(${foundHandlers.length} found - ${foundHandlers.join(', ')})`,
-              );
-            });
-      }),
-  );
+        }),
+    );
 }
 
 /**
@@ -121,50 +131,52 @@ async function walkThrough(
     dirPath: string,
     rootPath?: string,
 ): Promise<void> {
-  await Promise.all(
-      await readdir(dirPath, { withFileTypes: true })
-          .then((entries) => entries.map((entry) => {
-            let childPath = join(dirPath, entry.name);
+    await Promise.all(
+        await readdir(dirPath, { withFileTypes: true })
+            .then((entries) => entries.map((entry) => {
+                let childPath = join(dirPath, entry.name);
 
-            if (entry.isDirectory()) {
-              return [
-                walkThrough(childPath, rootPath ?? dirPath),
-              ];
-            }
+                if (entry.isDirectory()) {
+                    return [
+                        walkThrough(childPath, rootPath ?? dirPath),
+                    ];
+                }
 
-            const descriptor = {
-              absolutePath: childPath,
-              relativePath: '',
-              route: '',
-              handlers: [],
-            };
+                const descriptor: RouteDescriptor = {
+                    absolutePath: childPath,
+                    relativePath: '',
+                    route: '',
+                    config: {
+                        routes: [],
+                    },
+                };
 
-            routesMap.set(childPath, descriptor);
+                routesMap.set(childPath, descriptor);
 
-            // Remove the rootPath from the childPath
-            if (rootPath) {
-              childPath = childPath.replace(rootPath, '');
-            }
+                // Remove the rootPath from the childPath
+                if (rootPath) {
+                    childPath = childPath.replace(rootPath, '');
+                }
 
-            logger.info(`Found file ${childPath}`);
+                logger.info(`Found file ${childPath}`);
 
-            // File path without the root path
-            descriptor.relativePath = childPath;
+                // File path without the root path
+                descriptor.relativePath = childPath;
 
-            // The path on which the route will be registered on
-            let routeToParse = childPath;
+                // The path on which the route will be registered on
+                let routeToParse = childPath;
 
-            const pathSegments = childPath.split('/');
-            const lastSegment = pathSegments[pathSegments.length - 1];
+                const pathSegments = childPath.split('/');
+                const lastSegment = pathSegments[pathSegments.length - 1];
 
-            if (lastSegment.startsWith('index')) {
-              pathSegments.pop();
-              routeToParse = pathSegments.join('/');
-            }
+                if (lastSegment.startsWith('index')) {
+                    pathSegments.pop();
+                    routeToParse = pathSegments.join('/');
+                }
 
-            descriptor.route = parseRoute(routeToParse);
-          }).flat(Infinity)),
-  );
+                descriptor.route = parseRoute(routeToParse);
+            }).flat(Infinity)),
+    );
 }
 
 /**
@@ -174,39 +186,37 @@ async function walkThrough(
  * @return {void}
  */
 function registerRouter(app: Express) {
-  for (const descriptor of routesMap.values()) {
-    if (!descriptor.handlers?.length) {
-      logger.info(
-          `Skipping route ${descriptor.route}. ` +
-        `No handlers found for ${descriptor.relativePath}`,
-      );
-    }
+    for (const descriptor of routesMap.values()) {
+        if (!descriptor.config?.routes?.length) {
+            continue;
+        }
 
-    for (const handler of descriptor.handlers ?? []) {
-      logger.info(
-          `Registering route ${handler.verb} ${descriptor.route}`,
-      );
+        for (const config of descriptor.config.routes ?? []) {
+            logger.info(
+                `Registering route ${config.method} ${descriptor.route}`,
+            );
 
-      (app as any)[handler.verb.toLowerCase()](
-          descriptor.route,
-          handler.handler,
-      );
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (app as any)[config.method.toLowerCase()](
+                descriptor.route,
+                ...config.handlers,
+            );
+        }
     }
-  }
 }
 
 export async function loadRoutes(app: Express, rootDir: string) {
-  const start = performance.now();
+    const start = performance.now();
 
-  logger.info(`Loading routes from ${rootDir}`);
+    logger.info(`Loading routes from ${rootDir}`);
 
-  await walkThrough(rootDir);
-  await retrieveHandlers();
-  await registerRouter(app);
+    await walkThrough(rootDir);
+    await retrieveFilesRoutesConfig();
+    await registerRouter(app);
 
-  const end = performance.now();
-  const timeSpent = (end - start).toFixed(3);
-  logger.info(`Routes loaded in ${timeSpent} ms`);
+    const end = performance.now();
+    const timeSpent = (end - start).toFixed(3);
+    logger.info(`Routes loaded in ${timeSpent} ms`);
 
-  return app;
+    return app;
 }

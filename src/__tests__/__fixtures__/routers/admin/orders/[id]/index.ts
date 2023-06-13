@@ -1,5 +1,15 @@
 import { Request, Response } from 'express';
 
+export const getAdminOrdersIdMock = jest.fn();
+
 export async function GET(req: Request, res: Response): Promise<void> {
-  console.log('hello world');
+    getAdminOrdersIdMock();
+    res.send('hello world');
 }
+
+export const config = {
+    routes: [{
+        method: 'get',
+        handlers: [GET],
+    }],
+};
