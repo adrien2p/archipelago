@@ -192,10 +192,10 @@ async function walkThrough(
  */
 async function registerRouter<TConfig>(
     app: Express,
-    onRouteLoading: OnRouteLoadingHook<TConfig>,
+    onRouteLoading?: OnRouteLoadingHook<TConfig>,
 ) {
     for (const descriptor of routesMap.values()) {
-        await onRouteLoading(descriptor as RouteDescriptor<TConfig>);
+        await onRouteLoading?.(descriptor as RouteDescriptor<TConfig>);
         if (!descriptor.config?.routes?.length) {
             continue;
         }
@@ -217,7 +217,7 @@ async function registerRouter<TConfig>(
 export async function loadRoutes<TConfig = unknown>(
     app: Express,
     rootDir: string,
-    onRouteLoading: OnRouteLoadingHook<TConfig>,
+    onRouteLoading?: OnRouteLoadingHook<TConfig>,
 ) {
     const start = performance.now();
 
