@@ -214,7 +214,7 @@ async function registerRouter<TConfig>(
     }
 }
 
-export async function loadRoutes<TConfig = unknown>(
+export default async function archipelago<TConfig = unknown>(
     app: Express,
     rootDir: string,
     onRouteLoading?: OnRouteLoadingHook<TConfig>,

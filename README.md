@@ -30,7 +30,93 @@ or if you use yarn
 yarn add archipelago
 ```
 
+### Basic usage
+
+```ts
+import express from 'express';
+import archipelago from 'archipelago';
+
+(async () => {
+  const app = express();
+  await archipelago(app, {
+    routesPath: './routes'
+  });
+})();
+```
+
+or using top level await
+
+```ts
+import express from 'express';
+import archipelago from 'archipelago';
+
+const app = express();
+await archipelago(app, {
+  sroutesPath: './routes'
+});
+```
+
 ## Documentation
+
+The routes will be built based on the path of the file.
+For example, if you have a file in `./routes/users.js`, the route will be `/users`.
+
+The example below are using the `GET` verb but, you can use any verb you want.
+
+### define a simple route
+
+```ts
+// ./routes/users/index.ts
+export function list(req, res) {
+  res.send('Hello world');
+}
+
+export const config = {
+  routes: [{
+    method: 'get',
+    handlers: [list],
+  }],
+}
+```
+
+this route will be accessible at `/users` with the `GET` method.
+
+### define a route with a parameter
+
+```ts
+// ./routes/users/[id].ts
+export function get(req, res) {
+  res.send('Hello user ' + req.params.id);
+}
+
+export const config = {
+  routes: [{
+    method: 'get',
+    handlers: [get],
+  }],
+}
+```
+
+this route will be accessible at `/users/:id` with the `GET` method.
+
+### define a route on all sub routes
+
+```ts
+// ./routes/users/[id].ts
+export function beforeGetAndList(req, res) {
+  res.send(`Hello user${req.params.id ? ' ' + req.params.id : ''}`);
+}
+
+export const config = {
+  routes: [{
+    method: 'get',
+    handlers: [beforeGetAndList],
+  }],
+}
+```
+
+this route will be applied to `/users/*` with the `GET` method and therefore will be fired before
+any subsequent route handler.
 
 # Contribute
 
