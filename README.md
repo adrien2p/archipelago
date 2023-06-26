@@ -126,7 +126,7 @@ In some circumstances, you may want to hook yourself before a route is loading.
 For example if you want to apply some extra middlewares to a route, or if you want to check
 and consume the configuration for other purposes.
 
-To do so, you can use the `onRouteLoading` hook (the type of the descriptor is available [here](./src/types.ts)
+To do so, you can use the `onRouteLoading` hook (the type of the descriptor is available [here](./src/types.ts))
 
 ```ts
 import express from 'express';
