@@ -183,10 +183,15 @@ async function walkThrough(
  * Register the routes to the express app
  *
  * @param {Express} app
+ * @param {(config: unknown) => Promise<void>}onRouteLoading
  * @return {void}
  */
-function registerRouter(app: Express) {
+async function registerRouter<TConfig>(
+    app: Express,
+    onRouteLoading: (config: TConfig) => Promise<void>,
+) {
     for (const descriptor of routesMap.values()) {
+        await onRouteLoading(descriptor.config as TConfig);
         if (!descriptor.config?.routes?.length) {
             continue;
         }
@@ -205,14 +210,18 @@ function registerRouter(app: Express) {
     }
 }
 
-export async function loadRoutes(app: Express, rootDir: string) {
+export async function loadRoutes<TConfig = unknown>(
+    app: Express,
+    rootDir: string,
+    onRouteLoading: (config: TConfig) => Promise<void>,
+) {
     const start = performance.now();
 
     logger.info(`Loading routes from ${rootDir}`);
 
     await walkThrough(rootDir);
     await retrieveFilesRoutesConfig();
-    await registerRouter(app);
+    await registerRouter(app, onRouteLoading);
 
     const end = performance.now();
     const timeSpent = (end - start).toFixed(3);
