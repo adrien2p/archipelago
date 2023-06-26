@@ -52,18 +52,20 @@ import archipelago from 'archipelago';
 
 const app = express();
 await archipelago(app, {
-  sroutesPath: './routes'
+   routesPath: './routes'
 });
 ```
 
 ## Documentation
+
+### Defining routes
 
 The routes will be built based on the path of the file.
 For example, if you have a file in `./routes/users.js`, the route will be `/users`.
 
 The example below are using the `GET` verb but, you can use any verb you want.
 
-### define a simple route
+#### define a simple route
 
 ```ts
 // ./routes/users/index.ts
@@ -81,7 +83,7 @@ export const config = {
 
 this route will be accessible at `/users` with the `GET` method.
 
-### define a route with a parameter
+#### define a route with a parameter
 
 ```ts
 // ./routes/users/[id].ts
@@ -99,7 +101,7 @@ export const config = {
 
 this route will be accessible at `/users/:id` with the `GET` method.
 
-### define a route on all sub routes
+#### define a route on all sub routes
 
 ```ts
 // ./routes/users/[id].ts
@@ -117,6 +119,34 @@ export const config = {
 
 this route will be applied to `/users/*` with the `GET` method and therefore will be fired before
 any subsequent route handler.
+
+### Hook yourself before a route is loading
+
+In some circumstances, you may want to hook yourself before a route is loading.
+For example if you want to apply some extra middlewares to a route, or if you want to check
+and consume the configuration for other purposes.
+
+To do so, you can use the `onRouteLoading` hook.
+
+```ts
+import express from 'express';
+import archipelago from 'archipelago';
+
+async function onRouteLoading(descriptor) {
+  // do something with the descriptor
+  // ...
+  // You have access to everything the descriptor contains
+  // You can find the full types [here](./src/types.ts)
+  
+  return;
+}
+
+const app = express();
+await archipelago(app, {
+  routesPath: './routes',
+  onRouteLoading,
+});
+```
 
 # Contribute
 

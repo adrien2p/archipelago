@@ -2,6 +2,7 @@ import { Express } from 'express';
 import { readdir } from 'fs/promises';
 import { join, extname } from 'path';
 import { default as pino } from 'pino';
+import { OnRouteLoadingHook, RouteConfig, RouteDescriptor } from './types';
 
 const logger = pino({
     timestamp: false,
@@ -12,37 +13,6 @@ const logger = pino({
         },
     },
 });
-
-/* eslint-disable no-unused-vars */
-enum RouteVerbs {
-  GET = 'GET',
-  POST = 'POST',
-  PUT = 'PUT',
-  DELETE = 'DELETE',
-  PATCH = 'PATCH',
-  OPTIONS = 'OPTIONS',
-  HEAD = 'HEAD',
-  ALL = 'ALL',
-}
-/* eslint-enable no-unused-vars */
-
-type RouteConfig = {
-  method: RouteVerbs;
-  handlers: ((...args: unknown[]) => Promise<unknown>)[];
-}
-
-type RouteDescriptor<TConfig = unknown> = {
-  absolutePath: string;
-  relativePath: string;
-  route: string;
-  config?: TConfig &{
-    routes: RouteConfig[];
-  }
-}
-
-type OnRouteLoadingHook<TConfig> = (
-  descriptor: RouteDescriptor<TConfig>
-) => Promise<void>
 
 const pathSegmentReplacer = {
     '\\[\\.\\.\\.\\]': () => `*`,
