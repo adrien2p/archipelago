@@ -31,14 +31,18 @@ type RouteConfig = {
   handlers: ((...args: unknown[]) => Promise<unknown>)[];
 }
 
-type RouteDescriptor = {
+type RouteDescriptor<TConfig = unknown> = {
   absolutePath: string;
   relativePath: string;
   route: string;
-  config?: {
+  config?: TConfig &{
     routes: RouteConfig[];
   }
 }
+
+type OnRouteLoadingHook<TConfig> = (
+  descriptor: RouteDescriptor<TConfig>
+) => Promise<void>
 
 const pathSegmentReplacer = {
     '\\[\\.\\.\\.\\]': () => `*`,
@@ -183,15 +187,15 @@ async function walkThrough(
  * Register the routes to the express app
  *
  * @param {Express} app
- * @param {(config: unknown) => Promise<void>}onRouteLoading
- * @return {void}
+ * @param {OnRouteLoadingHook<TConfig>}onRouteLoading
+ * @return {Promise<void>}
  */
 async function registerRouter<TConfig>(
     app: Express,
-    onRouteLoading: (config: TConfig) => Promise<void>,
+    onRouteLoading: OnRouteLoadingHook<TConfig>,
 ) {
     for (const descriptor of routesMap.values()) {
-        await onRouteLoading(descriptor.config as TConfig);
+        await onRouteLoading(descriptor as RouteDescriptor<TConfig>);
         if (!descriptor.config?.routes?.length) {
             continue;
         }
@@ -213,7 +217,7 @@ async function registerRouter<TConfig>(
 export async function loadRoutes<TConfig = unknown>(
     app: Express,
     rootDir: string,
-    onRouteLoading: (config: TConfig) => Promise<void>,
+    onRouteLoading: OnRouteLoadingHook<TConfig>,
 ) {
     const start = performance.now();
 
