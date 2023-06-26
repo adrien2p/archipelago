@@ -126,7 +126,7 @@ In some circumstances, you may want to hook yourself before a route is loading.
 For example if you want to apply some extra middlewares to a route, or if you want to check
 and consume the configuration for other purposes.
 
-To do so, you can use the `onRouteLoading` hook.
+To do so, you can use the `onRouteLoading` hook (the type of the descriptor is available [here](./src/types.ts)
 
 ```ts
 import express from 'express';
@@ -136,7 +136,7 @@ async function onRouteLoading(descriptor) {
   // do something with the descriptor
   // ...
   // You have access to everything the descriptor contains
-  // You can find the full types [here](./src/types.ts)
+  // You can find the full types here https://github.com/adrien2p/archipelago/blob/main/src/types.ts
   
   return;
 }
