@@ -19,7 +19,7 @@ export type RouteConfig = {
 }
 
 export type GlobalMiddlewareRouteConfig = {
-  method?: RouteVerbs | 'get' | 'GET';
+  method?: RouteVerbs | 'get' | 'GET'; // default 'get'
   path: string;
   middlewares: ((...args: unknown[]) => Promise<unknown>)[];
 }

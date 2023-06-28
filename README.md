@@ -67,6 +67,29 @@ Here are the options you can pass to the `archipelago` function:
 
 ## Documentation
 
+### Defining global place for middlewares
+
+the special directory `_middlewares` allow you to define middlewares that will be applied to the specified routes.
+
+For example, if you want to apply a middleware to all routes in the `./routes/users` directory, you can create a file
+`./routes/_middlewares/users.ts` with the following content:
+
+```ts
+export function userMiddleware(req, res, next) {
+  console.log('before reaching users');
+  next();
+}
+
+export const config = {
+  routes: [{
+    method: 'all',
+    path: "/users",
+    middlewares: [userMiddleware],
+  }],
+}
+```
+
+
 ### Defining routes
 
 The routes will be built based on the path of the file.
