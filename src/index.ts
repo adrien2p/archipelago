@@ -1,22 +1,23 @@
 import { Express } from 'express';
 import { readdir } from 'fs/promises';
 import { join, extname } from 'path';
-import { default as pino } from 'pino';
 import {
-    Config, excludeExtensions,
+    Config,
+    excludeExtensions,
+    GlobalMiddlewareConfig,
+    GlobalMiddlewareDescriptor, GlobalMiddlewareRouteConfig,
     OnRouteLoadingHook,
     RouteConfig,
     RouteDescriptor,
 } from './types';
+import winston from 'winston';
 
-const logger = pino({
-    timestamp: false,
-    base: null,
-    formatters: {
-        level() {
-            return { level: undefined };
-        },
-    },
+const consoleTransport = new winston.transports.Console({
+    format: winston.format.printf((log) => log.message),
+});
+
+const logger = winston.createLogger({
+    transports: [consoleTransport],
 });
 
 const pathSegmentReplacer = {
@@ -25,15 +26,31 @@ const pathSegmentReplacer = {
     '\\]': () => ``,
 };
 
+const specialMiddlewaresDirName = '_middlewares';
+
 const routesMap = new Map<string, RouteDescriptor>();
+const globalMiddlewaresMap = new Map<string, GlobalMiddlewareDescriptor>();
+
+const createSpacingSting = (currentSize = 0) => {
+    return new Array(4 - currentSize + 1).join(' ');
+};
+
+const isMiddlewaresDir = (path: string) =>
+    path.endsWith(specialMiddlewaresDirName);
 
 /**
- * @param {RouteDescriptor[]} routes
+ * @param {RouteDescriptor[] | GlobalMiddlewareDescriptor[]} routes
  *
- * @return {RouteDescriptor[]} An array of sorted routes based on their priority
+ * @return {RouteDescriptor[] | GlobalMiddlewareDescriptor[]} An array of sorted
+ * routes based on their priority
  */
-const prioritizeRoutes = (routes: RouteDescriptor[]) =>
-    routes.sort((a, b) => a.priority - b.priority);
+const prioritize = (
+    routes: RouteDescriptor[] | GlobalMiddlewareDescriptor[],
+): RouteDescriptor[] | GlobalMiddlewareDescriptor[] => {
+    return routes.sort((a, b) => {
+        return a.priority - b.priority;
+    });
+};
 
 /**
  * The smaller the number the higher the priority with zero indicating
@@ -57,7 +74,7 @@ function calculatePriority(url: string) {
  *
  * @param {RouteDescriptor} descriptor
  * @param {Config} config
- * @param {boolean} strict If set to true, will throw an error if no
+ * @param {boolean?} strict If set to true, will throw an error if no
  * config is found
  *
  * @return {void}
@@ -93,6 +110,55 @@ function validateRouteConfig(
 }
 
 /**
+ * Validate the route config and display a log info if
+ * it should be ignored or skipped.
+ *
+ * @param {GlobalMiddlewareDescriptor} descriptor
+ * @param {GlobalMiddlewareConfig} config
+ * @param {boolean?} strict If set to true, will throw an error if no
+ * config is found
+ *
+ * @return {void}
+ */
+function validateMiddlewareConfig(
+    descriptor: GlobalMiddlewareDescriptor,
+    config?: GlobalMiddlewareConfig,
+    strict?: boolean,
+): void {
+    if (!config) {
+        if (strict) {
+            throw new Error(
+                `Unable to load the middlewares from ` +
+              `${descriptor.relativePath}. ` +
+              `No config found. Did you export a config object?`,
+            );
+        } else {
+            logger.info(
+                `Skipping loading middlewares from ` +
+              `${descriptor.relativePath}. ` +
+              `No config found. Did you export a config object?`,
+            );
+        }
+    }
+
+    if (config?.ignore) {
+        logger.info(
+            `Skipping loading middlewares from ` +
+          `${descriptor.relativePath}. ` +
+          `Ignore flag set to true.`,
+        );
+    }
+
+    if (!config?.routes?.some((route) => route.path)) {
+        throw new Error(
+            `Unable to load the middlewares from ` +
+          `${descriptor.relativePath}. ` +
+          `Missing path config.`,
+        );
+    }
+}
+
+/**
  * Take care of replacing the special path segments
  * to an express specific path segment
  *
@@ -103,20 +169,38 @@ function validateRouteConfig(
  * /admin/orders/[id]/index.ts => /admin/orders/:id/index.ts
  */
 function parseRoute(route: string): string {
+    let route_ = route;
+
     for (const config of Object.entries(pathSegmentReplacer)) {
         const [searchFor, replacedByFn] = config;
         const replacer = new RegExp(searchFor, 'g');
 
-        const matches = route.matchAll(replacer);
+        const matches = [...route_.matchAll(replacer)];
+
+        const parameters = new Set();
+
         for (const match of matches) {
-            route = route.replace(match[0], replacedByFn(match?.[1]));
+            if (match?.[1] && !Number.isInteger(match?.[1])) {
+                if (parameters.has(match?.[1])) {
+                    throw new Error(
+                        // eslint-disable-next-line max-len
+                        `Duplicate parameters found in route ${route} (${match?.[1]})`,
+                    );
+                }
+
+                parameters.add(match?.[1]);
+            }
+
+            route_ = route_.replace(match[0], replacedByFn(match?.[1]));
         }
 
-        const extension = extname(route);
+        const extension = extname(route_);
         if (extension) {
-            route = route.replace(extension, '');
+            route_ = route_.replace(extension, '');
         }
     }
+
+    route = route_;
 
     return route;
 }
@@ -125,40 +209,51 @@ function parseRoute(route: string): string {
  * Load the file content from a descriptor and retrieve the verbs and handlers
  * to be assigned to the descriptor
  *
- * @param {boolean} strict If set to true, then every file must export a config
+ * @param {boolean?} strict If set to true, then every file must export a config
  *
  * @return {Promise<void>}
  */
-async function retrieveFilesRoutesConfig({
+async function retrieveFilesConfig({
     strict,
 }: {
   strict?: boolean
 }): Promise<void> {
     await Promise.all(
-        [...routesMap.values()].map(async (descriptor) => {
+        [
+            ...routesMap.values(),
+            ...globalMiddlewaresMap.values(),
+        ].map(async (
+            descriptor: RouteDescriptor | GlobalMiddlewareDescriptor,
+        ) => {
             const absolutePath = descriptor.absolutePath;
+            const isGlobalMiddleware = isMiddlewaresDir(descriptor.route);
+
             return await import(absolutePath)
                 .then((imp) => {
-                    validateRouteConfig(descriptor, imp.config, strict);
+                    const map = isGlobalMiddleware ?
+                        globalMiddlewaresMap :
+                        routesMap;
+
+                    if (isGlobalMiddleware) {
+                        validateMiddlewareConfig(
+                            descriptor as GlobalMiddlewareDescriptor,
+                            imp.config,
+                            strict,
+                        );
+                    } else {
+                        validateRouteConfig(descriptor, imp.config, strict);
+                    }
+
+                    // Assign default verb to GET
+                    imp.config.routes = imp.config?.routes?.map((
+                        route: RouteConfig | GlobalMiddlewareRouteConfig,
+                    ) => {
+                        route.method = route.method ?? 'get';
+                        return route;
+                    });
 
                     descriptor.config = imp.config;
-
-                    routesMap.set(absolutePath, descriptor);
-                }).finally(() => {
-                    const config = descriptor.config;
-                    const verbs = config?.routes
-                        ?.map((route) => route.method) ?? ['none'];
-                    const handlersCount = config?.routes
-                        ?.map((route: RouteConfig) => route.handlers.length)
-                        ?.reduce((a, b) => a + b, 0) ?? 0;
-
-                    if (handlersCount && !config?.ignore) {
-                        logger.info(
-                            `Loading handlers from ` +
-                          `${descriptor.relativePath} ` +
-                          `(${handlersCount} found - ${verbs.join(', ')})`,
-                        );
-                    }
+                    map.set(absolutePath, descriptor);
                 });
         }),
     );
@@ -169,12 +264,14 @@ async function retrieveFilesRoutesConfig({
  *
  * @param {string} dirPath
  * @param {string?} rootPath
+ * @param {boolean?} isInMiddlewaresDirectory
  *
  * @return {Promise<void>}
  */
 async function walkThrough(
     dirPath: string,
     rootPath?: string,
+    isInMiddlewaresDirectory?: boolean,
 ): Promise<void> {
     await Promise.all(
         await readdir(dirPath, { withFileTypes: true })
@@ -191,31 +288,37 @@ async function walkThrough(
                     }
 
                     let childPath = join(dirPath, entry.name);
+                    isInMiddlewaresDirectory = isMiddlewaresDir(dirPath);
 
                     if (entry.isDirectory()) {
                         return [
-                            walkThrough(childPath, rootPath ?? dirPath),
+                            walkThrough(
+                                childPath,
+                                rootPath ?? dirPath,
+                                isInMiddlewaresDirectory,
+                            ),
                         ];
                     }
 
-                    const descriptor: RouteDescriptor = {
-                        absolutePath: childPath,
-                        relativePath: '',
-                        route: '',
-                        priority: Infinity,
-                        config: {
-                            routes: [],
-                        },
-                    };
+                    const descriptor:
+                      RouteDescriptor | GlobalMiddlewareDescriptor = {
+                          absolutePath: childPath,
+                          relativePath: '',
+                          route: '',
+                          priority: Infinity,
+                      };
 
-                    routesMap.set(childPath, descriptor);
+                    const map = isInMiddlewaresDirectory ?
+                        globalMiddlewaresMap :
+                        routesMap;
+                    map.set(childPath, descriptor);
 
                     // Remove the rootPath from the childPath
                     if (rootPath) {
                         childPath = childPath.replace(rootPath, '');
                     }
 
-                    logger.info(`Found file ${childPath}`);
+                    // logger.info(`Found file ${childPath}`);
 
                     // File path without the root path
                     descriptor.relativePath = childPath;
@@ -253,23 +356,56 @@ async function registerRouter<TConfig>(
     app: Express,
     onRouteLoading?: OnRouteLoadingHook<TConfig>,
 ) {
-    const prioritizedRoutes = prioritizeRoutes([...routesMap.values()]);
+    const prioritizedMiddlewares = prioritize([
+        ...globalMiddlewaresMap.values(),
+    ]);
+    const prioritizedRoutes = prioritize([...routesMap.values()]);
 
-    for (const descriptor of prioritizedRoutes) {
-        await onRouteLoading?.(descriptor as RouteDescriptor<TConfig>);
+    const routesAndMiddlewares = [
+        ...prioritizedMiddlewares,
+        ...prioritizedRoutes,
+    ] as RouteDescriptor[] | GlobalMiddlewareDescriptor[];
+
+    for (const descriptor of routesAndMiddlewares) {
         if (!descriptor.config?.routes?.length || descriptor.config?.ignore) {
             continue;
         }
 
-        for (const config of descriptor.config.routes ?? []) {
+        if (isMiddlewaresDir(descriptor.route)) {
+            const routes = descriptor.config
+                .routes! as GlobalMiddlewareRouteConfig[];
+
+            for (const route of routes) {
+                logger.info(
+                    // eslint-disable-next-line max-len
+                    `Registering middleware [${route.method?.toUpperCase()}${createSpacingSting(route.method?.length)}] - ${route.path}`,
+                );
+
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (app as any)[route.method!.toLowerCase()](
+                    route.path,
+                    ...route.middlewares,
+                );
+            }
+
+            continue;
+        }
+
+        await onRouteLoading?.(descriptor as RouteDescriptor<TConfig>);
+
+        const routes = descriptor.config
+            .routes! as RouteConfig[];
+
+        for (const route of routes) {
             logger.info(
-                `Registering route ${config.method} ${descriptor.route}`,
+                // eslint-disable-next-line max-len
+                `Registering route [${route.method?.toUpperCase()}${createSpacingSting(route.method?.length)}] - ${descriptor.route}`,
             );
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (app as any)[config.method.toLowerCase()](
+            (app as any)[route.method!.toLowerCase()](
                 descriptor.route,
-                ...config.handlers,
+                ...route.handlers,
             );
         }
     }
@@ -283,7 +419,7 @@ async function registerRouter<TConfig>(
  * @param {string} rootDir The directory to walk through
  * @param {OnRouteLoadingHook} onRouteLoading A hook that will be called when a
  * route is being loaded
- * @param {boolean} strict If set to true, then every file must export a config
+ * @param {boolean?} strict If set to true, then every file must export a config
  *
  * @return {Promise<Express>}
  */
@@ -300,7 +436,7 @@ export default async function archipelago<TConfig = unknown>(
     logger.info(`Loading routes from ${rootDir}`);
 
     await walkThrough(rootDir);
-    await retrieveFilesRoutesConfig({ strict });
+    await retrieveFilesConfig({ strict });
     await registerRouter(app, onRouteLoading);
 
     const end = performance.now();
