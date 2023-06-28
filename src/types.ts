@@ -16,13 +16,16 @@ export type RouteConfig = {
   handlers: ((...args: unknown[]) => Promise<unknown>)[];
 }
 
+export type Config = {
+  ignore?: boolean;
+  routes?: RouteConfig[];
+}
+
 export type RouteDescriptor<TConfig = Record<string, unknown>> = {
   absolutePath: string;
   relativePath: string;
   route: string;
-  config?: TConfig & {
-    routes: RouteConfig[];
-  }
+  config?: TConfig & Config
 }
 
 export type OnRouteLoadingHook<TConfig> = (

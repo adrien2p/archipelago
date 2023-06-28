@@ -2,7 +2,12 @@ import { Express } from 'express';
 import { readdir } from 'fs/promises';
 import { join, extname } from 'path';
 import { default as pino } from 'pino';
-import { OnRouteLoadingHook, RouteConfig, RouteDescriptor } from './types';
+import {
+    Config,
+    OnRouteLoadingHook,
+    RouteConfig,
+    RouteDescriptor,
+} from './types';
 
 const logger = pino({
     timestamp: false,
@@ -21,6 +26,43 @@ const pathSegmentReplacer = {
 };
 
 const routesMap = new Map<string, RouteDescriptor>();
+
+/**
+ * Validate the route config and display a log info if
+ * it should be ignored or skipped. It returns true if the
+ * route should be loaded and false if it should be skipped.
+ *
+ * @param {RouteDescriptor} descriptor
+ * @param {Config} config
+ *
+ * @return {boolean}
+ */
+function validateRouteConfig(
+    descriptor: RouteDescriptor,
+    config?: Config,
+): boolean {
+    if (!config) {
+        logger.info(
+            `Skipping loading handlers from ` +
+      `${descriptor.relativePath}.` +
+      `No config found.`,
+        );
+
+        return false;
+    }
+
+    if (config?.ignore) {
+        logger.info(
+            `Skipping loading handlers from ` +
+      `${descriptor.relativePath}.` +
+      `Ignore flag set to true.`,
+        );
+
+        return false;
+    }
+
+    return true;
+}
 
 /**
  * Take care of replacing the special path segments
@@ -63,12 +105,13 @@ async function retrieveFilesRoutesConfig(): Promise<void> {
             const absolutePath = descriptor.absolutePath;
             return await import(absolutePath)
                 .then((imp) => {
-                    if (!imp.config) {
-                        logger.info(
-                            `Skipping loading handlers from ` +
-                          `${descriptor.relativePath}.` +
-                          `No config found.`,
-                        );
+                    const shouldLoad = validateRouteConfig(
+                        descriptor,
+                        imp.config,
+                    );
+
+                    if (!shouldLoad) {
+                        return;
                     }
 
                     descriptor.config = imp.config;
@@ -184,6 +227,16 @@ async function registerRouter<TConfig>(
     }
 }
 
+/**
+ * Archipelago will walk through the rootDir and load all files if they need
+ * to be loaded
+ *
+ * @param {Express} app
+ * @param {string} rootDir
+ * @param {OnRouteLoadingHook} onRouteLoading
+ *
+ * @return {Promise<Express>}
+ */
 export default async function archipelago<TConfig = unknown>(
     app: Express,
     rootDir: string,
@@ -203,3 +256,5 @@ export default async function archipelago<TConfig = unknown>(
 
     return app;
 }
+
+export * from './types';

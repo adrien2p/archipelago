@@ -58,6 +58,13 @@ await archipelago(app, {
 
 ## Documentation
 
+### Configuration
+
+Each route file contains a config object that is exported to be loaded in the router.
+This config object contains the following properties:
+- routes: an array of route descriptors (here)[./src/types.ts#L14]
+- ignore: a boolean to ignore the file in case you want to use it to store other functions or utils (here)[./src/types.ts#L19]
+
 ### Defining routes
 
 The routes will be built based on the path of the file.
@@ -109,7 +116,7 @@ export function beforeGetAndList(req, res) {
   res.send(`Hello user${req.params.id ? ' ' + req.params.id : ''}`);
 }
 
-export const config = {
+export const config: Config = {
   routes: [{
     method: 'get',
     handlers: [beforeGetAndList],
