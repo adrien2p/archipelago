@@ -1,27 +1,32 @@
 import { NextFunction, Request, Response } from 'express';
 
-export async function GET(
+export const getAdminMiddlewareMock = jest.fn();
+export const postAdminMiddlewareMock = jest.fn();
+
+export async function getAdminMiddleware(
     req: Request,
     res: Response,
     next: NextFunction,
 ): Promise<void> {
+    getAdminMiddlewareMock();
     next();
 }
 
-export async function POST(
+export async function postAdminMiddleware(
     req: Request,
     res: Response,
     next: NextFunction,
 ): Promise<void> {
+    postAdminMiddlewareMock();
     next();
 }
 
 export const config = {
     routes: [{
         method: 'get',
-        handlers: [GET],
+        handlers: [getAdminMiddleware],
     }, {
         method: 'post',
-        handlers: [POST],
+        handlers: [postAdminMiddleware],
     }],
 };

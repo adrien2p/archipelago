@@ -39,7 +39,9 @@ import archipelago from 'archipelago';
 (async () => {
   const app = express();
   await archipelago(app, {
-    routesPath: './routes'
+    rootDir: './routes',
+    // onRouteLoading?: (descriptor) => Promise<void>
+    // strict?: boolean
   });
 })();
 ```
@@ -52,23 +54,28 @@ import archipelago from 'archipelago';
 
 const app = express();
 await archipelago(app, {
-   routesPath: './routes'
+   rootDir: './routes'
+  // onRouteLoading?: (descriptor) => Promise<void>
+  // strict?: boolean
 });
 ```
 
+Here are the options you can pass to the `archipelago` function:
+- **[required]** `rootDir`: The directory from which to load the routes
+- **[optional]** `onRouteLoading`: A function that will be called before a route is loaded
+- **[optional]** `strict`: A boolean to indicate if the router should throw an error if a config is not exported by a route file
+
 ## Documentation
-
-### Configuration
-
-Each route file contains a config object that is exported to be loaded in the router.
-This config object contains the following properties:
-- routes: an array of route descriptors (here)[./src/types.ts#L14]
-- ignore: a boolean to ignore the file in case you want to use it to store other functions or utils (here)[./src/types.ts#L19]
 
 ### Defining routes
 
 The routes will be built based on the path of the file.
 For example, if you have a file in `./routes/users.js`, the route will be `/users`.
+
+Each route file contains a config object that is exported to be loaded in the router.
+This config object contains the following properties:
+- **[optional]** `routes`: an array of route descriptors. (here)[./src/types.ts#L14]
+- **[optional]** `ignore`: a boolean to ignore the file in case you want to use it to store other functions or utils. (here)[./src/types.ts#L19]
 
 The example below are using the `GET` verb but, you can use any verb you want.
 
@@ -150,7 +157,7 @@ async function onRouteLoading(descriptor) {
 
 const app = express();
 await archipelago(app, {
-  routesPath: './routes',
+  rootDir: './routes',
   onRouteLoading,
 });
 ```

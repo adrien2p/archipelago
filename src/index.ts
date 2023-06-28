@@ -29,39 +29,43 @@ const routesMap = new Map<string, RouteDescriptor>();
 
 /**
  * Validate the route config and display a log info if
- * it should be ignored or skipped. It returns true if the
- * route should be loaded and false if it should be skipped.
+ * it should be ignored or skipped.
  *
  * @param {RouteDescriptor} descriptor
  * @param {Config} config
+ * @param {boolean} strict If set to true, will throw an error if no
+ * config is found
  *
- * @return {boolean}
+ * @return {void}
  */
 function validateRouteConfig(
     descriptor: RouteDescriptor,
     config?: Config,
-): boolean {
+    strict?: boolean,
+): void {
     if (!config) {
-        logger.info(
-            `Skipping loading handlers from ` +
-      `${descriptor.relativePath}.` +
-      `No config found.`,
-        );
-
-        return false;
+        if (strict) {
+            throw new Error(
+                `Unable to load the routes from ` +
+            `${descriptor.relativePath}. ` +
+            `No config found. Did you export a config object?`,
+            );
+        } else {
+            logger.info(
+                `Skipping loading handlers from ` +
+            `${descriptor.relativePath}. ` +
+            `No config found. Did you export a config object?`,
+            );
+        }
     }
 
     if (config?.ignore) {
         logger.info(
             `Skipping loading handlers from ` +
-      `${descriptor.relativePath}.` +
+      `${descriptor.relativePath}. ` +
       `Ignore flag set to true.`,
         );
-
-        return false;
     }
-
-    return true;
 }
 
 /**
@@ -97,22 +101,21 @@ function parseRoute(route: string): string {
  * Load the file content from a descriptor and retrieve the verbs and handlers
  * to be assigned to the descriptor
  *
+ * @param {boolean} strict If set to true, then every file must export a config
+ *
  * @return {Promise<void>}
  */
-async function retrieveFilesRoutesConfig(): Promise<void> {
+async function retrieveFilesRoutesConfig({
+    strict,
+}: {
+  strict?: boolean
+}): Promise<void> {
     await Promise.all(
         [...routesMap.values()].map(async (descriptor) => {
             const absolutePath = descriptor.absolutePath;
             return await import(absolutePath)
                 .then((imp) => {
-                    const shouldLoad = validateRouteConfig(
-                        descriptor,
-                        imp.config,
-                    );
-
-                    if (!shouldLoad) {
-                        return;
-                    }
+                    validateRouteConfig(descriptor, imp.config, strict);
 
                     descriptor.config = imp.config;
 
@@ -125,7 +128,7 @@ async function retrieveFilesRoutesConfig(): Promise<void> {
                         ?.map((route: RouteConfig) => route.handlers.length)
                         ?.reduce((a, b) => a + b, 0) ?? 0;
 
-                    if (handlersCount) {
+                    if (handlersCount && !config?.ignore) {
                         logger.info(
                             `Loading handlers from ` +
                           `${descriptor.relativePath} ` +
@@ -142,6 +145,7 @@ async function retrieveFilesRoutesConfig(): Promise<void> {
  *
  * @param {string} dirPath
  * @param {string?} rootPath
+ *
  * @return {Promise<void>}
  */
 async function walkThrough(
@@ -200,7 +204,9 @@ async function walkThrough(
  * Register the routes to the express app
  *
  * @param {Express} app
- * @param {OnRouteLoadingHook<TConfig>}onRouteLoading
+ * @param {OnRouteLoadingHook<TConfig>}onRouteLoading A hook that will be called
+ * when a route is being loaded
+ *
  * @return {Promise<void>}
  */
 async function registerRouter<TConfig>(
@@ -209,7 +215,7 @@ async function registerRouter<TConfig>(
 ) {
     for (const descriptor of routesMap.values()) {
         await onRouteLoading?.(descriptor as RouteDescriptor<TConfig>);
-        if (!descriptor.config?.routes?.length) {
+        if (!descriptor.config?.routes?.length || descriptor.config?.ignore) {
             continue;
         }
 
@@ -232,22 +238,27 @@ async function registerRouter<TConfig>(
  * to be loaded
  *
  * @param {Express} app
- * @param {string} rootDir
- * @param {OnRouteLoadingHook} onRouteLoading
+ * @param {string} rootDir The directory to walk through
+ * @param {OnRouteLoadingHook} onRouteLoading A hook that will be called when a
+ * route is being loaded
+ * @param {boolean} strict If set to true, then every file must export a config
  *
  * @return {Promise<Express>}
  */
 export default async function archipelago<TConfig = unknown>(
     app: Express,
-    rootDir: string,
-    onRouteLoading?: OnRouteLoadingHook<TConfig>,
+    { rootDir, onRouteLoading, strict }: {
+      rootDir: string,
+      onRouteLoading?: OnRouteLoadingHook<TConfig>
+      strict?: boolean
+    },
 ) {
     const start = performance.now();
 
     logger.info(`Loading routes from ${rootDir}`);
 
     await walkThrough(rootDir);
-    await retrieveFilesRoutesConfig();
+    await retrieveFilesRoutesConfig({ strict });
     await registerRouter(app, onRouteLoading);
 
     const end = performance.now();

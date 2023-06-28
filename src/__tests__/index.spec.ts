@@ -4,9 +4,13 @@ import request from 'supertest';
 import express from 'express';
 import archipelago from '../index';
 import {
-    getAdminOrdersIdMock,
+    getAdminOrdersIdMock, postAdminOrdersIdMock,
 } from './__fixtures__/routers/admin/orders/[id]';
-import { GET, POST } from './__fixtures__/routers/admin/[...]';
+import {
+    getAdminMiddlewareMock,
+    postAdminMiddlewareMock,
+} from './__fixtures__/routers/admin/[...]';
+import { getIgnoreMock } from './__fixtures__/routers/admin/orders';
 
 const hookMock = jest.fn();
 
@@ -17,48 +21,54 @@ describe('loadRouter', function() {
     beforeAll(async function() {
         await app.listen(3000);
         const rootDir = resolve(__dirname, '__fixtures__/routers');
-        await archipelago(app, rootDir, hookMock);
+        await archipelago(app, {
+            rootDir,
+            onRouteLoading: hookMock,
+            strict: true,
+        });
     });
 
-    afterAll(async function() {
-        server.close();
+    afterAll(function(done) {
+        server.close(() => {
+            done();
+        });
     });
 
-    it('should call route loading hook', async function() {
+    afterEach(function() {
+        jest.clearAllMocks();
+    });
+
+    it('should call the route loading hook', async function() {
         expect(hookMock).toHaveBeenCalled();
-        expect(hookMock).toHaveBeenCalledTimes(8);
-        expect(hookMock).toHaveBeenNthCalledWith(1, {
-            // eslint-disable-next-line max-len
-            'absolutePath': __dirname + '/__fixtures__/routers/admin/[...].ts',
-            'config': {
-                'routes': expect.arrayContaining([
-                    {
-                        'handlers': [GET],
-                        'method': 'get',
-                    },
-                    {
-                        'handlers': [POST],
-                        'method': 'post',
-                    },
-                ]),
-            },
-            'relativePath': '/admin/[...].ts',
-            'route': '/admin/*',
-        });
-        expect(hookMock).toHaveBeenNthCalledWith(2, {
-            // eslint-disable-next-line max-len
-            'absolutePath': __dirname + '/__fixtures__/routers/admin/index.ts',
-            'config': undefined,
-            'relativePath': '/admin/index.ts',
-            'route': '/admin',
-        });
+        expect(hookMock).toHaveBeenCalledTimes(9);
     });
 
-    it('should call the admin/order/:id route', async function() {
+    // eslint-disable-next-line max-len
+    it('should call the GET admin/order/:id route has it should have been loaded', async function() {
         await request(server).get('/admin/orders/1000')
             .expect(200)
             .expect('hello world');
 
         expect(getAdminOrdersIdMock).toHaveBeenCalled();
+        expect(getAdminMiddlewareMock).toHaveBeenCalledTimes(1);
+    });
+
+    // eslint-disable-next-line max-len
+    it('should call the POST admin/order/:id route has it should have been loaded', async function() {
+        await request(server).post('/admin/orders/1000')
+            .expect(200)
+            .expect('hello world');
+
+        expect(postAdminOrdersIdMock).toHaveBeenCalled();
+        expect(postAdminMiddlewareMock).toHaveBeenCalledTimes(1);
+    });
+
+    // eslint-disable-next-line max-len
+    it('should not load the admin/order/ignore route has it has been ignored in the config', async function() {
+        await request(server).get('/admin/orders')
+            .expect(404);
+
+        expect(getIgnoreMock).not.toHaveBeenCalled();
+        expect(getAdminMiddlewareMock).toHaveBeenCalledTimes(1);
     });
 });
