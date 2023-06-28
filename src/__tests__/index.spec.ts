@@ -6,10 +6,6 @@ import archipelago from '../index';
 import {
     getAdminOrdersIdMock, postAdminOrdersIdMock,
 } from './__fixtures__/routers/admin/orders/[id]';
-import {
-    getAdminMiddlewareMock,
-    postAdminMiddlewareMock,
-} from './__fixtures__/routers/admin/[...]';
 import { getIgnoreMock } from './__fixtures__/routers/admin/orders';
 
 const hookMock = jest.fn();
@@ -40,7 +36,7 @@ describe('loadRouter', function() {
 
     it('should call the route loading hook', async function() {
         expect(hookMock).toHaveBeenCalled();
-        expect(hookMock).toHaveBeenCalledTimes(9);
+        expect(hookMock).toHaveBeenCalledTimes(8);
     });
 
     // eslint-disable-next-line max-len
@@ -50,7 +46,6 @@ describe('loadRouter', function() {
             .expect('hello world');
 
         expect(getAdminOrdersIdMock).toHaveBeenCalled();
-        expect(getAdminMiddlewareMock).toHaveBeenCalledTimes(1);
     });
 
     // eslint-disable-next-line max-len
@@ -60,7 +55,6 @@ describe('loadRouter', function() {
             .expect('hello world');
 
         expect(postAdminOrdersIdMock).toHaveBeenCalled();
-        expect(postAdminMiddlewareMock).toHaveBeenCalledTimes(1);
     });
 
     // eslint-disable-next-line max-len
@@ -69,6 +63,5 @@ describe('loadRouter', function() {
             .expect(404);
 
         expect(getIgnoreMock).not.toHaveBeenCalled();
-        expect(getAdminMiddlewareMock).toHaveBeenCalledTimes(1);
     });
 });

@@ -1,3 +1,5 @@
+export const excludeExtensions = ['.map.js', '.d.ts'];
+
 /* eslint-disable no-unused-vars */
 export enum RouteVerbs {
   GET = 'GET',
@@ -25,6 +27,7 @@ export type RouteDescriptor<TConfig = Record<string, unknown>> = {
   absolutePath: string;
   relativePath: string;
   route: string;
+  priority: number;
   config?: TConfig & Config
 }
 

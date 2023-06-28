@@ -3,7 +3,7 @@ import { readdir } from 'fs/promises';
 import { join, extname } from 'path';
 import { default as pino } from 'pino';
 import {
-    Config,
+    Config, excludeExtensions,
     OnRouteLoadingHook,
     RouteConfig,
     RouteDescriptor,
@@ -26,6 +26,30 @@ const pathSegmentReplacer = {
 };
 
 const routesMap = new Map<string, RouteDescriptor>();
+
+/**
+ * @param {RouteDescriptor[]} routes
+ *
+ * @return An array of sorted routes based on their priority
+ */
+const prioritizeRoutes = (routes: RouteDescriptor[]) =>
+    routes.sort((a, b) => a.priority - b.priority);
+
+/**
+ * The smaller the number the higher the priority with zero indicating
+ * highest priority
+ *
+ * @param {string} url
+ *
+ * @return {number} An integer ranging from 0 to Infinity
+ */
+function calculatePriority(url: string) {
+    const depth = url.match(/\/.+?/g)?.length || 0;
+    const specifity = url.match(/\/:.+?/g)?.length || 0;
+    const catchall = (url.match(/\/\*/g)?.length || 0) > 0 ? Infinity : 0;
+
+    return depth + specifity + catchall;
+}
 
 /**
  * Validate the route config and display a log info if
@@ -154,49 +178,65 @@ async function walkThrough(
 ): Promise<void> {
     await Promise.all(
         await readdir(dirPath, { withFileTypes: true })
-            .then((entries) => entries.map((entry) => {
-                let childPath = join(dirPath, entry.name);
+            .then((entries) => {
+                return entries.map((entry) => {
+                    const shouldContinue = entry.isDirectory() ||
+                      !excludeExtensions
+                          .some((extension) => {
+                              return entry.name.endsWith(extension);
+                          });
 
-                if (entry.isDirectory()) {
-                    return [
-                        walkThrough(childPath, rootPath ?? dirPath),
-                    ];
-                }
+                    if (!shouldContinue) {
+                        return;
+                    }
 
-                const descriptor: RouteDescriptor = {
-                    absolutePath: childPath,
-                    relativePath: '',
-                    route: '',
-                    config: {
-                        routes: [],
-                    },
-                };
+                    let childPath = join(dirPath, entry.name);
 
-                routesMap.set(childPath, descriptor);
+                    if (entry.isDirectory()) {
+                        return [
+                            walkThrough(childPath, rootPath ?? dirPath),
+                        ];
+                    }
 
-                // Remove the rootPath from the childPath
-                if (rootPath) {
-                    childPath = childPath.replace(rootPath, '');
-                }
+                    const descriptor: RouteDescriptor = {
+                        absolutePath: childPath,
+                        relativePath: '',
+                        route: '',
+                        priority: Infinity,
+                        config: {
+                            routes: [],
+                        },
+                    };
 
-                logger.info(`Found file ${childPath}`);
+                    routesMap.set(childPath, descriptor);
 
-                // File path without the root path
-                descriptor.relativePath = childPath;
+                    // Remove the rootPath from the childPath
+                    if (rootPath) {
+                        childPath = childPath.replace(rootPath, '');
+                    }
 
-                // The path on which the route will be registered on
-                let routeToParse = childPath;
+                    logger.info(`Found file ${childPath}`);
 
-                const pathSegments = childPath.split('/');
-                const lastSegment = pathSegments[pathSegments.length - 1];
+                    // File path without the root path
+                    descriptor.relativePath = childPath;
 
-                if (lastSegment.startsWith('index')) {
-                    pathSegments.pop();
-                    routeToParse = pathSegments.join('/');
-                }
+                    // The path on which the route will be registered on
+                    let routeToParse = childPath;
 
-                descriptor.route = parseRoute(routeToParse);
-            }).flat(Infinity)),
+                    const pathSegments = childPath.split('/');
+                    const lastSegment = pathSegments[pathSegments.length - 1];
+
+                    if (lastSegment.startsWith('index')) {
+                        pathSegments.pop();
+                        routeToParse = pathSegments.join('/');
+                    }
+
+                    descriptor.route = parseRoute(routeToParse);
+                    descriptor.priority = calculatePriority(descriptor.route);
+                })
+                    .filter(Boolean)
+                    .flat(Infinity);
+            }),
     );
 }
 
@@ -213,7 +253,9 @@ async function registerRouter<TConfig>(
     app: Express,
     onRouteLoading?: OnRouteLoadingHook<TConfig>,
 ) {
-    for (const descriptor of routesMap.values()) {
+    const prioritizedRoutes = prioritizeRoutes([...routesMap.values()]);
+
+    for (const descriptor of prioritizedRoutes) {
         await onRouteLoading?.(descriptor as RouteDescriptor<TConfig>);
         if (!descriptor.config?.routes?.length || descriptor.config?.ignore) {
             continue;
