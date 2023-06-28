@@ -352,7 +352,7 @@ async function walkThrough(
  *
  * @return {Promise<void>}
  */
-async function registerRouter<TConfig>(
+async function registerRoutesAndMiddlewares<TConfig>(
     app: Express,
     onRouteLoading?: OnRouteLoadingHook<TConfig>,
 ) {
@@ -437,7 +437,7 @@ export default async function archipelago<TConfig = unknown>(
 
     await walkThrough(rootDir);
     await retrieveFilesConfig({ strict });
-    await registerRouter(app, onRouteLoading);
+    await registerRoutesAndMiddlewares(app, onRouteLoading);
 
     const end = performance.now();
     const timeSpent = (end - start).toFixed(3);
