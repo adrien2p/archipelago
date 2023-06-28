@@ -77,7 +77,10 @@ This config object contains the following properties:
 - **[optional]** `routes`: an array of route descriptors. (here)[./src/types.ts#L14]
 - **[optional]** `ignore`: a boolean to ignore the file in case you want to use it to store other functions or utils. (here)[./src/types.ts#L19]
 
-The example below are using the `GET` verb but, you can use any verb you want.
+**PRIORITY:**
+
+The routes are loaded depending on their priority. The routes with the lower number (highest priority) are loaded first.
+A wilcard route has a priority of Infinity. The smaller number, the higher is the priority.
 
 #### define a simple route
 

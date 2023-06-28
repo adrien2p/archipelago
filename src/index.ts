@@ -30,7 +30,7 @@ const routesMap = new Map<string, RouteDescriptor>();
 /**
  * @param {RouteDescriptor[]} routes
  *
- * @return An array of sorted routes based on their priority
+ * @return {RouteDescriptor[]} An array of sorted routes based on their priority
  */
 const prioritizeRoutes = (routes: RouteDescriptor[]) =>
     routes.sort((a, b) => a.priority - b.priority);
