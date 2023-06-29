@@ -268,12 +268,17 @@ async function retrieveFilesConfig({
  *
  * @return {Promise<void>}
  */
-async function walkThrough(
-    dirPath: string,
-    excludes: RegExp[] = [],
-    rootPath?: string,
-    isInMiddlewaresDirectory?: boolean,
-): Promise<void> {
+async function walkThrough({
+    dirPath,
+    excludes = [],
+    rootPath,
+    isInMiddlewaresDirectory,
+} : {
+  dirPath: string,
+  excludes: RegExp[],
+  rootPath?: string,
+  isInMiddlewaresDirectory?: boolean,
+}): Promise<void> {
     await Promise.all(
         await readdir(dirPath, { withFileTypes: true }).then((entries) => {
             return entries
@@ -301,12 +306,12 @@ async function walkThrough(
 
                     if (entry.isDirectory()) {
                         return [
-                            walkThrough(
-                                childPath,
+                            walkThrough({
+                                dirPath: childPath,
                                 excludes,
-                                rootPath ?? dirPath,
+                                rootPath: rootPath ?? dirPath,
                                 isInMiddlewaresDirectory,
-                            ),
+                            }),
                         ];
                     }
 
@@ -367,10 +372,13 @@ async function walkThrough(
  *
  * @return {Promise<void>}
  */
-async function registerRoutesAndMiddlewares<TConfig>(
-    app: Express,
-    onRouteLoading?: OnRouteLoadingHook<TConfig>,
-) {
+async function registerRoutesAndMiddlewares<TConfig>({
+    app,
+    onRouteLoading,
+}: {
+  app: Express,
+  onRouteLoading?: OnRouteLoadingHook<TConfig>,
+}) {
     const prioritizedMiddlewares = prioritize(
         [...globalMiddlewaresMap.values()],
     );
@@ -461,9 +469,15 @@ export default async function archipelago<TConfig = unknown>(
 
     const start = Date.now();
 
-    await walkThrough(rootDir, excludes ?? []);
+    await walkThrough({
+        dirPath: rootDir,
+        excludes: excludes ?? [],
+    });
     await retrieveFilesConfig({ strict });
-    await registerRoutesAndMiddlewares(app, onRouteLoading);
+    await registerRoutesAndMiddlewares({
+        app,
+        onRouteLoading,
+    });
 
     const end = Date.now();
     const timeSpent = end - start;
