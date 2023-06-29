@@ -89,14 +89,14 @@ function validateRouteConfig(
         if (strict) {
             throw new Error(
                 `Unable to load the routes from ` +
-              `${descriptor.relativePath}. ` +
-              `No config found. Did you export a config object?`,
+        `${descriptor.relativePath}. ` +
+        `No config found.`,
             );
         } else {
             logger.info(
                 `Skipping loading handlers from ` +
-              `${descriptor.relativePath}. ` +
-              `No config found. Did you export a config object?`,
+        `${descriptor.relativePath}. ` +
+        `No config found.`,
             );
         }
     }
@@ -104,8 +104,8 @@ function validateRouteConfig(
     if (config?.ignore) {
         logger.info(
             `Skipping loading handlers from ` +
-          `${descriptor.relativePath}. ` +
-          `Ignore flag set to true.`,
+      `${descriptor.relativePath}. ` +
+      `Ignore flag set to true.`,
         );
     }
 }
@@ -130,14 +130,14 @@ function validateMiddlewareConfig(
         if (strict) {
             throw new Error(
                 `Unable to load the middlewares from ` +
-              `${descriptor.relativePath}. ` +
-              `No config found. Did you export a config object?`,
+        `${descriptor.relativePath}. ` +
+        `No config found.`,
             );
         } else {
             logger.info(
                 `Skipping loading middlewares from ` +
-              `${descriptor.relativePath}. ` +
-              `No config found. Did you export a config object?`,
+        `${descriptor.relativePath}. ` +
+        `No config found.`,
             );
         }
     }
@@ -145,16 +145,16 @@ function validateMiddlewareConfig(
     if (config?.ignore) {
         logger.info(
             `Skipping loading middlewares from ` +
-          `${descriptor.relativePath}. ` +
-          `Ignore flag set to true.`,
+      `${descriptor.relativePath}. ` +
+      `Ignore flag set to true.`,
         );
     }
 
     if (!config?.routes?.some((route) => route.path)) {
         throw new Error(
             `Unable to load the middlewares from ` +
-          `${descriptor.relativePath}. ` +
-          `Missing path config.`,
+      `${descriptor.relativePath}. ` +
+      `Missing path config.`,
         );
     }
 }
@@ -217,7 +217,7 @@ function parseRoute(route: string): string {
 async function retrieveFilesConfig({
     strict,
 }: {
-    strict?: boolean
+  strict?: boolean
 }): Promise<void> {
     await Promise.all(
         [...routesMap.values(), ...globalMiddlewaresMap.values()].map(
@@ -233,9 +233,9 @@ async function retrieveFilesConfig({
 
                     if (isGlobalMiddleware) {
                         validateMiddlewareConfig(
-                      descriptor as GlobalMiddlewareDescriptor,
-                      imp.config,
-                      strict,
+              descriptor as GlobalMiddlewareDescriptor,
+              imp.config,
+              strict,
                         );
                     } else {
                         validateRouteConfig(descriptor, imp.config, strict);
@@ -287,10 +287,10 @@ async function walkThrough(
                 })
                 .map((entry) => {
                     const shouldContinue =
-                  entry.isDirectory() ||
-                  !excludeExtensions.some((extension) => {
-                      return entry.name.endsWith(extension);
-                  });
+            entry.isDirectory() ||
+            !excludeExtensions.some((extension) => {
+                return entry.name.endsWith(extension);
+            });
 
                     if (!shouldContinue) {
                         return;
@@ -328,7 +328,12 @@ async function walkThrough(
                         childPath = childPath.replace(rootPath, '');
                     }
 
-                    // logger.info(`Found file ${childPath}`);
+                    logger.info(
+                        `Found file ${childPath} (from ${dirPath.replace(
+                            process.cwd(),
+                            '',
+                        )})`,
+                    );
 
                     // File path without the root path
                     descriptor.relativePath = childPath;
@@ -425,7 +430,7 @@ async function registerRoutesAndMiddlewares<TConfig>(
 }
 
 /**
- * Archipelago will walk through the rootDir and load all files if they need
+ * archipelago will walk through the rootDir and load all files if they need
  * to be loaded
  *
  * @param {Express} app
@@ -445,22 +450,23 @@ export default async function archipelago<TConfig = unknown>(
         onRouteLoading,
         strict,
     }: {
-      rootDir: string
-      onRouteLoading?: OnRouteLoadingHook<TConfig>
-      strict?: boolean
-      excludes?: RegExp[]
+    rootDir: string
+    onRouteLoading?: OnRouteLoadingHook<TConfig>
+    strict?: boolean
+    excludes?: RegExp[]
   },
 ) {
-    const start = Date.now();
+    routesMap.clear();
+    globalMiddlewaresMap.clear();
 
-    logger.info(`Loading routes from ${rootDir}`);
+    const start = Date.now();
 
     await walkThrough(rootDir, excludes ?? []);
     await retrieveFilesConfig({ strict });
     await registerRoutesAndMiddlewares(app, onRouteLoading);
 
     const end = Date.now();
-    const timeSpent = (end - start).toFixed(3);
+    const timeSpent = end - start;
     logger.info(`Routes loaded in ${timeSpent} ms`);
 
     return app;
