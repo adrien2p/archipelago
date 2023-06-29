@@ -2,29 +2,29 @@ import { Express } from 'express';
 import { readdir } from 'fs/promises';
 import { extname, join } from 'path';
 import {
-    Config,
-    excludeExtensions,
-    GlobalMiddlewareConfig,
-    GlobalMiddlewareDescriptor,
-    GlobalMiddlewareRouteConfig,
-    OnRouteLoadingHook,
-    RouteConfig,
-    RouteDescriptor,
+  Config,
+  excludeExtensions,
+  GlobalMiddlewareConfig,
+  GlobalMiddlewareDescriptor,
+  GlobalMiddlewareRouteConfig,
+  OnRouteLoadingHook,
+  RouteConfig,
+  RouteDescriptor,
 } from './types';
 import winston from 'winston';
 
 const consoleTransport = new winston.transports.Console({
-    format: winston.format.printf((log) => log.message),
+  format: winston.format.printf((log) => log.message),
 });
 
 const logger = winston.createLogger({
-    transports: [consoleTransport],
+  transports: [consoleTransport],
 });
 
 const pathSegmentReplacer = {
-    '\\[\\.\\.\\.\\]': () => `*`,
-    '\\[(\\w+)?': (param?: string) => `:${param}`,
-    '\\]': () => ``,
+  '\\[\\.\\.\\.\\]': () => `*`,
+  '\\[(\\w+)?': (param?: string) => `:${param}`,
+  '\\]': () => ``,
 };
 
 const specialMiddlewaresDirName = '_middlewares';
@@ -33,11 +33,11 @@ const routesMap = new Map<string, RouteDescriptor>();
 const globalMiddlewaresMap = new Map<string, GlobalMiddlewareDescriptor>();
 
 const createSpacingSting = (currentSize = 0) => {
-    return new Array(4 - currentSize + 1).join(' ');
+  return new Array(4 - currentSize + 1).join(' ');
 };
 
 const isMiddlewaresDir = (path: string) =>
-    path.endsWith(specialMiddlewaresDirName);
+  path.endsWith(specialMiddlewaresDirName);
 
 /**
  * @param {RouteDescriptor[] | GlobalMiddlewareDescriptor[]} routes
@@ -46,11 +46,11 @@ const isMiddlewaresDir = (path: string) =>
  * routes based on their priority
  */
 const prioritize = (
-    routes: RouteDescriptor[] | GlobalMiddlewareDescriptor[],
+  routes: RouteDescriptor[] | GlobalMiddlewareDescriptor[],
 ): RouteDescriptor[] | GlobalMiddlewareDescriptor[] => {
-    return routes.sort((a, b) => {
-        return a.priority - b.priority;
-    });
+  return routes.sort((a, b) => {
+    return a.priority - b.priority;
+  });
 };
 
 /**
@@ -62,11 +62,11 @@ const prioritize = (
  * @return {number} An integer ranging from 0 to Infinity
  */
 function calculatePriority(url: string) {
-    const depth = url.match(/\/.+?/g)?.length || 0;
-    const specifity = url.match(/\/:.+?/g)?.length || 0;
-    const catchall = (url.match(/\/\*/g)?.length || 0) > 0 ? Infinity : 0;
+  const depth = url.match(/\/.+?/g)?.length || 0;
+  const specifity = url.match(/\/:.+?/g)?.length || 0;
+  const catchall = (url.match(/\/\*/g)?.length || 0) > 0 ? Infinity : 0;
 
-    return depth + specifity + catchall;
+  return depth + specifity + catchall;
 }
 
 /**
@@ -81,33 +81,33 @@ function calculatePriority(url: string) {
  * @return {void}
  */
 function validateRouteConfig(
-    descriptor: RouteDescriptor,
-    config?: Config,
-    strict?: boolean,
+  descriptor: RouteDescriptor,
+  config?: Config,
+  strict?: boolean,
 ): void {
-    if (!config) {
-        if (strict) {
-            throw new Error(
-                `Unable to load the routes from ` +
+  if (!config) {
+    if (strict) {
+      throw new Error(
+        `Unable to load the routes from ` +
         `${descriptor.relativePath}. ` +
         `No config found.`,
-            );
-        } else {
-            logger.info(
-                `Skip loading handlers from ` +
+      );
+    } else {
+      logger.info(
+        `Skip loading handlers from ` +
         `${descriptor.relativePath}. ` +
         `No config found.`,
-            );
-        }
+      );
     }
+  }
 
-    if (config?.ignore) {
-        logger.info(
-            `Skip loading handlers from ` +
+  if (config?.ignore) {
+    logger.info(
+      `Skip loading handlers from ` +
       `${descriptor.relativePath}. ` +
       `Ignore flag set to true.`,
-        );
-    }
+    );
+  }
 }
 
 /**
@@ -122,41 +122,41 @@ function validateRouteConfig(
  * @return {void}
  */
 function validateMiddlewareConfig(
-    descriptor: GlobalMiddlewareDescriptor,
-    config?: GlobalMiddlewareConfig,
-    strict?: boolean,
+  descriptor: GlobalMiddlewareDescriptor,
+  config?: GlobalMiddlewareConfig,
+  strict?: boolean,
 ): void {
-    if (!config) {
-        if (strict) {
-            throw new Error(
-                `Unable to load the middlewares from ` +
+  if (!config) {
+    if (strict) {
+      throw new Error(
+        `Unable to load the middlewares from ` +
         `${descriptor.relativePath}. ` +
         `No config found.`,
-            );
-        } else {
-            logger.info(
-                `Skip loading middlewares from ` +
+      );
+    } else {
+      logger.info(
+        `Skip loading middlewares from ` +
         `${descriptor.relativePath}. ` +
         `No config found.`,
-            );
-        }
+      );
     }
+  }
 
-    if (config?.ignore) {
-        logger.info(
-            `Skip loading middlewares from ` +
+  if (config?.ignore) {
+    logger.info(
+      `Skip loading middlewares from ` +
       `${descriptor.relativePath}. ` +
       `Ignore flag set to true.`,
-        );
-    }
+    );
+  }
 
-    if (!config?.routes?.some((route) => route.path)) {
-        throw new Error(
-            `Unable to load the middlewares from ` +
+  if (!config?.routes?.some((route) => route.path)) {
+    throw new Error(
+      `Unable to load the middlewares from ` +
       `${descriptor.relativePath}. ` +
       `Missing path config.`,
-        );
-    }
+    );
+  }
 }
 
 /**
@@ -170,40 +170,40 @@ function validateMiddlewareConfig(
  * /admin/orders/[id]/index.ts => /admin/orders/:id/index.ts
  */
 function parseRoute(route: string): string {
-    let route_ = route;
+  let route_ = route;
 
-    for (const config of Object.entries(pathSegmentReplacer)) {
-        const [searchFor, replacedByFn] = config;
-        const replacer = new RegExp(searchFor, 'g');
+  for (const config of Object.entries(pathSegmentReplacer)) {
+    const [searchFor, replacedByFn] = config;
+    const replacer = new RegExp(searchFor, 'g');
 
-        const matches = [...route_.matchAll(replacer)];
+    const matches = [...route_.matchAll(replacer)];
 
-        const parameters = new Set();
+    const parameters = new Set();
 
-        for (const match of matches) {
-            if (match?.[1] && !Number.isInteger(match?.[1])) {
-                if (parameters.has(match?.[1])) {
-                    throw new Error(
-                        // eslint-disable-next-line max-len
-                        `Duplicate parameters found in route ${route} (${match?.[1]})`,
-                    );
-                }
-
-                parameters.add(match?.[1]);
-            }
-
-            route_ = route_.replace(match[0], replacedByFn(match?.[1]));
+    for (const match of matches) {
+      if (match?.[1] && !Number.isInteger(match?.[1])) {
+        if (parameters.has(match?.[1])) {
+          throw new Error(
+            // eslint-disable-next-line max-len
+            `Duplicate parameters found in route ${route} (${match?.[1]})`,
+          );
         }
 
-        const extension = extname(route_);
-        if (extension) {
-            route_ = route_.replace(extension, '');
-        }
+        parameters.add(match?.[1]);
+      }
+
+      route_ = route_.replace(match[0], replacedByFn(match?.[1]));
     }
 
-    route = route_;
+    const extension = extname(route_);
+    if (extension) {
+      route_ = route_.replace(extension, '');
+    }
+  }
 
-    return route;
+  route = route_;
+
+  return route;
 }
 
 /**
@@ -215,47 +215,47 @@ function parseRoute(route: string): string {
  * @return {Promise<void>}
  */
 async function retrieveFilesConfig({
-    strict,
+  strict,
 }: {
   strict?: boolean
 }): Promise<void> {
-    await Promise.all(
-        [...routesMap.values(), ...globalMiddlewaresMap.values()].map(
-            // eslint-disable-next-line max-len
-            async (descriptor: RouteDescriptor | GlobalMiddlewareDescriptor) => {
-                const absolutePath = descriptor.absolutePath;
-                const isGlobalMiddleware = isMiddlewaresDir(descriptor.route);
+  await Promise.all(
+    [...routesMap.values(), ...globalMiddlewaresMap.values()].map(
+      // eslint-disable-next-line max-len
+      async (descriptor: RouteDescriptor | GlobalMiddlewareDescriptor) => {
+        const absolutePath = descriptor.absolutePath;
+        const isGlobalMiddleware = isMiddlewaresDir(descriptor.route);
 
-                return await import(absolutePath).then((imp) => {
-                    const map = isGlobalMiddleware ?
-                        globalMiddlewaresMap :
-                        routesMap;
+        return await import(absolutePath).then((imp) => {
+          const map = isGlobalMiddleware ?
+            globalMiddlewaresMap :
+            routesMap;
 
-                    if (isGlobalMiddleware) {
-                        validateMiddlewareConfig(
+          if (isGlobalMiddleware) {
+            validateMiddlewareConfig(
               descriptor as GlobalMiddlewareDescriptor,
               imp.config,
               strict,
-                        );
-                    } else {
-                        validateRouteConfig(descriptor, imp.config, strict);
-                    }
+            );
+          } else {
+            validateRouteConfig(descriptor, imp.config, strict);
+          }
 
-                    // Assign default verb to GET
-                    imp.config ??= {};
-                    imp.config.routes = imp.config?.routes?.map(
-                        (route: RouteConfig | GlobalMiddlewareRouteConfig) => {
-                            route.method = route.method ?? 'get';
-                            return route;
-                        },
-                    );
-
-                    descriptor.config = imp.config;
-                    map.set(absolutePath, descriptor);
-                });
+          // Assign default verb to GET
+          imp.config ??= {};
+          imp.config.routes = imp.config?.routes?.map(
+            (route: RouteConfig | GlobalMiddlewareRouteConfig) => {
+              route.method = route.method ?? 'get';
+              return route;
             },
-        ),
-    );
+          );
+
+          descriptor.config = imp.config;
+          map.set(absolutePath, descriptor);
+        });
+      },
+    ),
+  );
 }
 
 /**
@@ -269,98 +269,95 @@ async function retrieveFilesConfig({
  * @return {Promise<void>}
  */
 async function walkThrough({
-    dirPath,
-    excludes = [],
-    rootPath,
-    isInMiddlewaresDirectory,
+  dirPath,
+  excludes = [],
+  rootPath,
+  isInMiddlewaresDirectory,
 } : {
   dirPath: string,
   excludes: RegExp[],
   rootPath?: string,
   isInMiddlewaresDirectory?: boolean,
 }): Promise<void> {
-    await Promise.all(
-        await readdir(dirPath, { withFileTypes: true }).then((entries) => {
-            return entries
-                .filter((entry) => {
-                    if (!excludes.length) {
-                        return true;
-                    }
+  await Promise.all(
+    await readdir(dirPath, { withFileTypes: true }).then((entries) => {
+      return entries
+        .filter((entry) => {
+          if (!excludes.length) {
+            return true;
+          }
 
-                    const fullPath = join(dirPath, entry.name);
-                    return !excludes.some((exclude) => exclude.test(fullPath));
-                })
-                .map((entry) => {
-                    const shouldContinue =
+          const fullPath = join(dirPath, entry.name);
+          return !excludes.some((exclude) => exclude.test(fullPath));
+        })
+        .map((entry) => {
+          const shouldContinue =
             entry.isDirectory() ||
             !excludeExtensions.some((extension) => {
-                return entry.name.endsWith(extension);
+              return entry.name.endsWith(extension);
             });
 
-                    if (!shouldContinue) {
-                        return;
-                    }
+          if (!shouldContinue) {
+            return;
+          }
 
-                    let childPath = join(dirPath, entry.name);
-                    isInMiddlewaresDirectory = isMiddlewaresDir(dirPath);
+          let childPath = join(dirPath, entry.name);
+          isInMiddlewaresDirectory = isMiddlewaresDir(dirPath);
 
-                    if (entry.isDirectory()) {
-                        return [
-                            walkThrough({
-                                dirPath: childPath,
-                                excludes,
-                                rootPath: rootPath ?? dirPath,
-                                isInMiddlewaresDirectory,
-                            }),
-                        ];
-                    }
+          if (entry.isDirectory()) {
+            return walkThrough({
+              dirPath: childPath,
+              excludes,
+              rootPath: rootPath ?? dirPath,
+              isInMiddlewaresDirectory,
+            });
+          }
 
-                    const descriptor:
-                      RouteDescriptor | GlobalMiddlewareDescriptor = {
-                          absolutePath: childPath,
-                          relativePath: '',
-                          route: '',
-                          priority: Infinity,
-                      };
+          const descriptor: RouteDescriptor | GlobalMiddlewareDescriptor = {
+            absolutePath: childPath,
+            relativePath: '',
+            route: '',
+            priority: Infinity,
+          };
 
-                    const map = isInMiddlewaresDirectory ?
-                        globalMiddlewaresMap :
-                        routesMap;
-                    map.set(childPath, descriptor);
+          const map = isInMiddlewaresDirectory ?
+            globalMiddlewaresMap :
+            routesMap;
+          map.set(childPath, descriptor);
 
-                    // Remove the rootPath from the childPath
-                    if (rootPath) {
-                        childPath = childPath.replace(rootPath, '');
-                    }
+          // Remove the rootPath from the childPath
+          if (rootPath) {
+            childPath = childPath.replace(rootPath, '');
+          }
 
-                    logger.info(
-                        `Found file ${childPath} (from ${dirPath.replace(
-                            process.cwd(),
-                            '',
-                        )})`,
-                    );
+          logger.info(
+            `Found file ${childPath} (from ${dirPath.replace(
+              process.cwd(),
+              '',
+            )})`,
+          );
 
-                    // File path without the root path
-                    descriptor.relativePath = childPath;
+          // File path without the root path
+          descriptor.relativePath = childPath;
 
-                    // The path on which the route will be registered on
-                    let routeToParse = childPath;
+          // The path on which the route will be registered on
+          let routeToParse = childPath;
 
-                    const pathSegments = childPath.split('/');
-                    const lastSegment = pathSegments[pathSegments.length - 1];
+          const pathSegments = childPath.split('/');
+          const lastSegment = pathSegments[pathSegments.length - 1];
 
-                    if (lastSegment.startsWith('index')) {
-                        pathSegments.pop();
-                        routeToParse = pathSegments.join('/');
-                    }
+          if (lastSegment.startsWith('index')) {
+            pathSegments.pop();
+            routeToParse = pathSegments.join('/');
+          }
 
-                    descriptor.route = parseRoute(routeToParse);
-                    descriptor.priority = calculatePriority(descriptor.route);
-                    return;
-                })
-                .flat(Infinity);
-        }),
-    );
+          descriptor.route = parseRoute(routeToParse);
+          descriptor.priority = calculatePriority(descriptor.route);
+          return;
+        })
+        .flat(Infinity);
+    }),
+  );
 }
 
 /**
@@ -373,68 +370,68 @@ async function walkThrough({
  * @return {Promise<void>}
  */
 async function registerRoutesAndMiddlewares<TConfig>({
-    app,
-    onRouteLoading,
+  app,
+  onRouteLoading,
 }: {
   app: Express,
   onRouteLoading?: OnRouteLoadingHook<TConfig>,
 }) {
-    const prioritizedMiddlewares = prioritize(
-        [...globalMiddlewaresMap.values()],
-    );
-    const prioritizedRoutes = prioritize([...routesMap.values()]);
+  const prioritizedMiddlewares = prioritize(
+    [...globalMiddlewaresMap.values()],
+  );
+  const prioritizedRoutes = prioritize([...routesMap.values()]);
 
-    const routesAndMiddlewares = [
-        ...prioritizedMiddlewares,
-        ...prioritizedRoutes,
-    ] as RouteDescriptor[] | GlobalMiddlewareDescriptor[];
+  const routesAndMiddlewares = [
+    ...prioritizedMiddlewares,
+    ...prioritizedRoutes,
+  ] as RouteDescriptor[] | GlobalMiddlewareDescriptor[];
 
-    for (const descriptor of routesAndMiddlewares) {
-        if (!descriptor.config?.routes?.length || descriptor.config?.ignore) {
-            continue;
-        }
-
-        if (isMiddlewaresDir(descriptor.route)) {
-            const routes = descriptor.config
-                .routes! as unknown as GlobalMiddlewareRouteConfig[];
-
-            for (const route of routes) {
-                logger.info(
-                    // eslint-disable-next-line max-len
-                    `Registering middleware [${route.method?.toUpperCase()}${createSpacingSting(
-                        route.method?.length,
-                    )}] - ${route.path}`,
-                )
-
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                ;(app as any)[route.method!.toLowerCase()](
-                    route.path,
-                    ...route.middlewares,
-                );
-            }
-
-            continue;
-        }
-
-        await onRouteLoading?.(descriptor as RouteDescriptor<TConfig>);
-
-        const routes = descriptor.config.routes! as RouteConfig[];
-
-        for (const route of routes) {
-            logger.info(
-                // eslint-disable-next-line max-len
-                `Registering route [${route.method?.toUpperCase()}${createSpacingSting(
-                    route.method?.length,
-                )}] - ${descriptor.route}`,
-            )
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ;(app as any)[route.method!.toLowerCase()](
-                descriptor.route,
-                ...route.handlers,
-            );
-        }
+  for (const descriptor of routesAndMiddlewares) {
+    if (!descriptor.config?.routes?.length || descriptor.config?.ignore) {
+      continue;
     }
+
+    if (isMiddlewaresDir(descriptor.route)) {
+      const routes = descriptor.config
+        .routes! as unknown as GlobalMiddlewareRouteConfig[];
+
+      for (const route of routes) {
+        logger.info(
+          // eslint-disable-next-line max-len
+          `Registering middleware [${route.method?.toUpperCase()}${createSpacingSting(
+            route.method?.length,
+          )}] - ${route.path}`,
+        )
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(app as any)[route.method!.toLowerCase()](
+          route.path,
+          ...route.middlewares,
+        );
+      }
+
+      continue;
+    }
+
+    await onRouteLoading?.(descriptor as RouteDescriptor<TConfig>);
+
+    const routes = descriptor.config.routes! as RouteConfig[];
+
+    for (const route of routes) {
+      logger.info(
+        // eslint-disable-next-line max-len
+        `Registering route [${route.method?.toUpperCase()}${createSpacingSting(
+          route.method?.length,
+        )}] - ${descriptor.route}`,
+      )
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(app as any)[route.method!.toLowerCase()](
+        descriptor.route,
+        ...route.handlers,
+      );
+    }
+  }
 }
 
 /**
@@ -451,39 +448,39 @@ async function registerRoutesAndMiddlewares<TConfig>({
  * @return {Promise<Express>}
  */
 export default async function archipelago<TConfig = unknown>(
-    app: Express,
-    {
-        rootDir,
-        excludes,
-        onRouteLoading,
-        strict,
-    }: {
+  app: Express,
+  {
+    rootDir,
+    excludes,
+    onRouteLoading,
+    strict,
+  }: {
     rootDir: string
     onRouteLoading?: OnRouteLoadingHook<TConfig>
     strict?: boolean
     excludes?: RegExp[]
   },
 ) {
-    routesMap.clear();
-    globalMiddlewaresMap.clear();
+  routesMap.clear();
+  globalMiddlewaresMap.clear();
 
-    const start = Date.now();
+  const start = Date.now();
 
-    await walkThrough({
-        dirPath: rootDir,
-        excludes: excludes ?? [],
-    });
-    await retrieveFilesConfig({ strict });
-    await registerRoutesAndMiddlewares({
-        app,
-        onRouteLoading,
-    });
+  await walkThrough({
+    dirPath: rootDir,
+    excludes: excludes ?? [],
+  });
+  await retrieveFilesConfig({ strict });
+  await registerRoutesAndMiddlewares({
+    app,
+    onRouteLoading,
+  });
 
-    const end = Date.now();
-    const timeSpent = end - start;
-    logger.info(`Routes loaded in ${timeSpent} ms`);
+  const end = Date.now();
+  const timeSpent = end - start;
+  logger.info(`Routes loaded in ${timeSpent} ms`);
 
-    return app;
+  return app;
 }
 
 export * from './types';

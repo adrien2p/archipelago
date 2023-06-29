@@ -24,6 +24,6 @@ module.exports = {
     'rules': {
         'require-jsdoc': 'off',
         'object-curly-spacing': ['error', 'always'],
-        'indent': ['error', 4],
+        'indent': ['error', 2],
     },
 };
