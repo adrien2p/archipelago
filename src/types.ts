@@ -1,4 +1,4 @@
-export const excludeExtensions = ['.map.js', '.d.ts'];
+export const excludeExtensions = ['.js.map', '.d.ts', '.d.ts.map'];
 
 /* eslint-disable no-unused-vars */
 export enum RouteVerbs {

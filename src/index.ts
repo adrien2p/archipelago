@@ -1,11 +1,12 @@
 import { Express } from 'express';
 import { readdir } from 'fs/promises';
-import { join, extname } from 'path';
+import { extname, join } from 'path';
 import {
     Config,
     excludeExtensions,
     GlobalMiddlewareConfig,
-    GlobalMiddlewareDescriptor, GlobalMiddlewareRouteConfig,
+    GlobalMiddlewareDescriptor,
+    GlobalMiddlewareRouteConfig,
     OnRouteLoadingHook,
     RouteConfig,
     RouteDescriptor,
@@ -88,14 +89,14 @@ function validateRouteConfig(
         if (strict) {
             throw new Error(
                 `Unable to load the routes from ` +
-            `${descriptor.relativePath}. ` +
-            `No config found. Did you export a config object?`,
+              `${descriptor.relativePath}. ` +
+              `No config found. Did you export a config object?`,
             );
         } else {
             logger.info(
                 `Skipping loading handlers from ` +
-            `${descriptor.relativePath}. ` +
-            `No config found. Did you export a config object?`,
+              `${descriptor.relativePath}. ` +
+              `No config found. Did you export a config object?`,
             );
         }
     }
@@ -103,8 +104,8 @@ function validateRouteConfig(
     if (config?.ignore) {
         logger.info(
             `Skipping loading handlers from ` +
-      `${descriptor.relativePath}. ` +
-      `Ignore flag set to true.`,
+          `${descriptor.relativePath}. ` +
+          `Ignore flag set to true.`,
         );
     }
 }
@@ -216,72 +217,80 @@ function parseRoute(route: string): string {
 async function retrieveFilesConfig({
     strict,
 }: {
-  strict?: boolean
+    strict?: boolean
 }): Promise<void> {
     await Promise.all(
-        [
-            ...routesMap.values(),
-            ...globalMiddlewaresMap.values(),
-        ].map(async (
-            descriptor: RouteDescriptor | GlobalMiddlewareDescriptor,
-        ) => {
-            const absolutePath = descriptor.absolutePath;
-            const isGlobalMiddleware = isMiddlewaresDir(descriptor.route);
+        [...routesMap.values(), ...globalMiddlewaresMap.values()].map(
+            // eslint-disable-next-line max-len
+            async (descriptor: RouteDescriptor | GlobalMiddlewareDescriptor) => {
+                const absolutePath = descriptor.absolutePath;
+                const isGlobalMiddleware = isMiddlewaresDir(descriptor.route);
 
-            return await import(absolutePath)
-                .then((imp) => {
+                return await import(absolutePath).then((imp) => {
                     const map = isGlobalMiddleware ?
                         globalMiddlewaresMap :
                         routesMap;
 
                     if (isGlobalMiddleware) {
                         validateMiddlewareConfig(
-                            descriptor as GlobalMiddlewareDescriptor,
-                            imp.config,
-                            strict,
+                      descriptor as GlobalMiddlewareDescriptor,
+                      imp.config,
+                      strict,
                         );
                     } else {
                         validateRouteConfig(descriptor, imp.config, strict);
                     }
 
                     // Assign default verb to GET
-                    imp.config.routes = imp.config?.routes?.map((
-                        route: RouteConfig | GlobalMiddlewareRouteConfig,
-                    ) => {
-                        route.method = route.method ?? 'get';
-                        return route;
-                    });
+                    imp.config ??= {};
+                    imp.config.routes = imp.config?.routes?.map(
+                        (route: RouteConfig | GlobalMiddlewareRouteConfig) => {
+                            route.method = route.method ?? 'get';
+                            return route;
+                        },
+                    );
 
                     descriptor.config = imp.config;
                     map.set(absolutePath, descriptor);
                 });
-        }),
+            },
+        ),
     );
 }
 
 /**
  * Walks through a directory and returns all files in the directory recursively
  *
- * @param {string} dirPath
- * @param {string?} rootPath
+ * @param {string} dirPath Directory from which to start
+ * @param {RegExp[]} [excludes = []] List of files to exclude
+ * @param {string?} rootPath The parent path of the directory
  * @param {boolean?} isInMiddlewaresDirectory
  *
  * @return {Promise<void>}
  */
 async function walkThrough(
     dirPath: string,
+    excludes: RegExp[] = [],
     rootPath?: string,
     isInMiddlewaresDirectory?: boolean,
 ): Promise<void> {
     await Promise.all(
-        await readdir(dirPath, { withFileTypes: true })
-            .then((entries) => {
-                return entries.map((entry) => {
-                    const shouldContinue = entry.isDirectory() ||
-                      !excludeExtensions
-                          .some((extension) => {
-                              return entry.name.endsWith(extension);
-                          });
+        await readdir(dirPath, { withFileTypes: true }).then((entries) => {
+            return entries
+                .filter((entry) => {
+                    if (!excludes.length) {
+                        return true;
+                    }
+
+                    const fullPath = join(dirPath, entry.name);
+                    return !excludes.some((exclude) => exclude.test(fullPath));
+                })
+                .map((entry) => {
+                    const shouldContinue =
+                  entry.isDirectory() ||
+                  !excludeExtensions.some((extension) => {
+                      return entry.name.endsWith(extension);
+                  });
 
                     if (!shouldContinue) {
                         return;
@@ -294,6 +303,7 @@ async function walkThrough(
                         return [
                             walkThrough(
                                 childPath,
+                                excludes,
                                 rootPath ?? dirPath,
                                 isInMiddlewaresDirectory,
                             ),
@@ -336,10 +346,10 @@ async function walkThrough(
 
                     descriptor.route = parseRoute(routeToParse);
                     descriptor.priority = calculatePriority(descriptor.route);
+                    return;
                 })
-                    .filter(Boolean)
-                    .flat(Infinity);
-            }),
+                .flat(Infinity);
+        }),
     );
 }
 
@@ -356,9 +366,9 @@ async function registerRoutesAndMiddlewares<TConfig>(
     app: Express,
     onRouteLoading?: OnRouteLoadingHook<TConfig>,
 ) {
-    const prioritizedMiddlewares = prioritize([
-        ...globalMiddlewaresMap.values(),
-    ]);
+    const prioritizedMiddlewares = prioritize(
+        [...globalMiddlewaresMap.values()],
+    );
     const prioritizedRoutes = prioritize([...routesMap.values()]);
 
     const routesAndMiddlewares = [
@@ -373,16 +383,18 @@ async function registerRoutesAndMiddlewares<TConfig>(
 
         if (isMiddlewaresDir(descriptor.route)) {
             const routes = descriptor.config
-                .routes! as GlobalMiddlewareRouteConfig[];
+                .routes! as unknown as GlobalMiddlewareRouteConfig[];
 
             for (const route of routes) {
                 logger.info(
                     // eslint-disable-next-line max-len
-                    `Registering middleware [${route.method?.toUpperCase()}${createSpacingSting(route.method?.length)}] - ${route.path}`,
-                );
+                    `Registering middleware [${route.method?.toUpperCase()}${createSpacingSting(
+                        route.method?.length,
+                    )}] - ${route.path}`,
+                )
 
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                (app as any)[route.method!.toLowerCase()](
+                ;(app as any)[route.method!.toLowerCase()](
                     route.path,
                     ...route.middlewares,
                 );
@@ -393,17 +405,18 @@ async function registerRoutesAndMiddlewares<TConfig>(
 
         await onRouteLoading?.(descriptor as RouteDescriptor<TConfig>);
 
-        const routes = descriptor.config
-            .routes! as RouteConfig[];
+        const routes = descriptor.config.routes! as RouteConfig[];
 
         for (const route of routes) {
             logger.info(
                 // eslint-disable-next-line max-len
-                `Registering route [${route.method?.toUpperCase()}${createSpacingSting(route.method?.length)}] - ${descriptor.route}`,
-            );
+                `Registering route [${route.method?.toUpperCase()}${createSpacingSting(
+                    route.method?.length,
+                )}] - ${descriptor.route}`,
+            )
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (app as any)[route.method!.toLowerCase()](
+            ;(app as any)[route.method!.toLowerCase()](
                 descriptor.route,
                 ...route.handlers,
             );
@@ -417,6 +430,7 @@ async function registerRoutesAndMiddlewares<TConfig>(
  *
  * @param {Express} app
  * @param {string} rootDir The directory to walk through
+ * @param {RegExp[]} [excludes = []] List of files to exclude
  * @param {OnRouteLoadingHook} onRouteLoading A hook that will be called when a
  * route is being loaded
  * @param {boolean?} strict If set to true, then every file must export a config
@@ -425,21 +439,27 @@ async function registerRoutesAndMiddlewares<TConfig>(
  */
 export default async function archipelago<TConfig = unknown>(
     app: Express,
-    { rootDir, onRouteLoading, strict }: {
-      rootDir: string,
+    {
+        rootDir,
+        excludes,
+        onRouteLoading,
+        strict,
+    }: {
+      rootDir: string
       onRouteLoading?: OnRouteLoadingHook<TConfig>
       strict?: boolean
-    },
+      excludes?: RegExp[]
+  },
 ) {
-    const start = performance.now();
+    const start = Date.now();
 
     logger.info(`Loading routes from ${rootDir}`);
 
-    await walkThrough(rootDir);
+    await walkThrough(rootDir, excludes ?? []);
     await retrieveFilesConfig({ strict });
     await registerRoutesAndMiddlewares(app, onRouteLoading);
 
-    const end = performance.now();
+    const end = Date.now();
     const timeSpent = (end - start).toFixed(3);
     logger.info(`Routes loaded in ${timeSpent} ms`);
 
