@@ -94,7 +94,7 @@ function validateRouteConfig(
             );
         } else {
             logger.info(
-                `Skipping loading handlers from ` +
+                `Skip loading handlers from ` +
         `${descriptor.relativePath}. ` +
         `No config found.`,
             );
@@ -103,7 +103,7 @@ function validateRouteConfig(
 
     if (config?.ignore) {
         logger.info(
-            `Skipping loading handlers from ` +
+            `Skip loading handlers from ` +
       `${descriptor.relativePath}. ` +
       `Ignore flag set to true.`,
         );
@@ -135,7 +135,7 @@ function validateMiddlewareConfig(
             );
         } else {
             logger.info(
-                `Skipping loading middlewares from ` +
+                `Skip loading middlewares from ` +
         `${descriptor.relativePath}. ` +
         `No config found.`,
             );
@@ -144,7 +144,7 @@ function validateMiddlewareConfig(
 
     if (config?.ignore) {
         logger.info(
-            `Skipping loading middlewares from ` +
+            `Skip loading middlewares from ` +
       `${descriptor.relativePath}. ` +
       `Ignore flag set to true.`,
         );
